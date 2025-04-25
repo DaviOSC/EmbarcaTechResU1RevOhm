@@ -37,10 +37,13 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
         PICO_STDIO_ENABLE_PRINTF=1
     )
 
+pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/pio_matrix.pio)
+
 target_link_libraries(${PROJECT_NAME} 
         pico_stdlib 
         hardware_i2c
         hardware_adc
+        hardware_pio
         )
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)
