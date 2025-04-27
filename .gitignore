@@ -2,3 +2,7 @@ build
 .vscode
 pico_sdk_import.cmake
 .gitattributes
+diagram.json
+wokwi.toml
+extra
+imagens
