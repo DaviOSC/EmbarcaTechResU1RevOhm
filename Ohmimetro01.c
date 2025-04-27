@@ -12,6 +12,8 @@
 #include "pico/bootrom.h"
 #include "pio_matrix.pio.h"
 
+#define LED_PIN_RED 13
+
 #define I2C_PORT i2c1
 #define I2C_SDA 14
 #define I2C_SCL 15
@@ -47,13 +49,14 @@ int find_nearest_e24(float resistance);
 void get_color_bands(int resistance, int *band1, int *band2, int *band3, int *multiplier);
 void draw_resistor_bands(int band1, int band2, int multiplier, PIO pio, uint sm);
 void draw_resistor_bands_5(int band1, int band2, int band3, int multiplier, PIO pio, uint sm);
-void corrigir_linhas(double desenho[][3]);
 void gpio_irq_handler(uint gpio, uint32_t events);
 
 int main()
 {
     // Para ser utilizado o modo BOOTSEL com botão B
     stdio_init_all();
+    gpio_init(LED_PIN_RED);
+    gpio_set_dir(LED_PIN_RED, GPIO_OUT);
     gpio_init(botaoB);
     gpio_set_dir(botaoB, GPIO_IN);
     gpio_pull_up(botaoB);
@@ -108,11 +111,9 @@ int main()
         int band1, band2, band3, multiplier;
         get_color_bands(nearest_resistance, &band1, &band2, &band3, &multiplier);
 
-        sprintf(str_band1, "%s", COLOR_CODES[band1]);
-        sprintf(str_band2, "%s", COLOR_CODES[band2]);
-        sprintf(str_band3, "%s", COLOR_CODES[band3]);
-        sprintf(str_multiplier, "%s", COLOR_CODES[multiplier]);
-        sprintf(str_resistance, "%d", nearest_resistance);
+        sprintf(str_band1, "1:%s", COLOR_CODES[band1]);
+        sprintf(str_multiplier, "M:%s", COLOR_CODES[multiplier]);
+        sprintf(str_resistance, "Res:%d", nearest_resistance);
         sprintf(title, "Ohmimetro %s", is_four_band_mode ? "4F" : "5F");
 
         int cor = 1;
@@ -124,28 +125,29 @@ int main()
         ssd1306_line(&ssd, 3, 49, 123, 49, cor);
 
         ssd1306_draw_string(&ssd, title, 17, 6);      // Exibe "Ohmimetro"
-        ssd1306_draw_string(&ssd, "Fx1:", 6, 18);     // Exibe "Faixa 1:"
-        ssd1306_draw_string(&ssd, str_band1, 55, 18); // Exibe o texto da primeira faixa de cor
+        //ssd1306_draw_string(&ssd, "Fx1:", 6, 18);     // Exibe "Faixa 1:"
+        ssd1306_draw_string(&ssd, str_band1, 6, 18); // Exibe o texto da primeira faixa de cor
         if (is_four_band_mode)
         {
-            ssd1306_draw_string(&ssd, "Fx2:", 6, 29);     // Exibe "Faixa 2:"
-            ssd1306_draw_string(&ssd, str_band2, 55, 29); // Exibe o texto da segunda faixa de cor
-            draw_resistor_bands(band1, band2, multiplier, pio, sm);
+            sprintf(str_band2, "2:%s", COLOR_CODES[band2]);
+
+            ssd1306_draw_string(&ssd, str_band2, 6, 29); // Exibe o texto da segunda faixa de cor
+           draw_resistor_bands(band1, band2, multiplier, pio, sm);
         }
         else
         {
-            ssd1306_draw_string(&ssd, "Fx2:", 6, 29);     // Exibe "Faixa 2:"
-            ssd1306_draw_string(&ssd, str_band2, 45, 29); // Exibe o texto da segunda faixa de cor
-            ssd1306_draw_string(&ssd, "Fx3:", 50, 29);    // Exibe "Faixa 3:"
-            ssd1306_draw_string(&ssd, str_band3, 55, 29); // Exibe o texto da segunda faixa de cor
+            sprintf(str_band2, "2:%.4s", COLOR_CODES[band2]);
+            sprintf(str_band3, "3:%.4s", COLOR_CODES[band3]);
+            ssd1306_draw_string(&ssd, str_band2, 6, 29); // Exibe o texto da segunda faixa de cor
+            ssd1306_draw_string(&ssd, str_band3, 65, 29); // Exibe o texto da segunda faixa de cor
             draw_resistor_bands_5(band1, band2, band3, multiplier, pio, sm);
         }
 
-        ssd1306_draw_string(&ssd, "Mult.:", 6, 40);        // Exibe "Multiplicador:"
-        ssd1306_draw_string(&ssd, str_multiplier, 55, 40); // Exibe o texto do multiplicador
-        ssd1306_draw_string(&ssd, "Resi.:", 6, 52);        // Exibe "Resistencia:"
-        ssd1306_draw_string(&ssd, str_resistance, 55, 52); // Exibe o valor da resistência
+        ssd1306_draw_string(&ssd, str_multiplier, 6, 40); // Exibe o texto do multiplicador
+        ssd1306_draw_string(&ssd, str_resistance, 6, 52); // Exibe o valor da resistência
         ssd1306_send_data(&ssd);                           // Atualiza o display
+        gpio_put(LED_PIN_RED, 1); // Desliga o LED vermelho
+
         sleep_ms(1000);
     }
 }
@@ -215,17 +217,7 @@ void get_color_bands(int resistance, int *band1, int *band2, int *band3, int *mu
         *band2 = digits % 10; // Segundo dígito
         *multiplier = pow10;  // Potência de 10
     }
-    // else
-    // {
-    //     while (digits >= 100)
-    //     {
-    //         digits /= 10;
-    //         pow10++;
-    //     }
-    //     *band1 = digits / 10; // Primeiro dígito
-    //     *band2 = digits % 10; // Segundo dígito
-    //     *multiplier = pow10;  // Potência de 10 (multiplicador)
-    // }
+
     else
     {
         while (digits >= 1000)
@@ -264,21 +256,7 @@ void gpio_irq_handler(uint gpio, uint32_t events)
         reset_usb_boot(0, 0);
     }
 }
-void corrigir_linhas(double desenho[][3])
-{
-    // Troca os valores da linha 1 com a linha 4
-    for (int i = 0; i < 25; i++)
-    {
-        printf("[%.1f]", desenho[i]); // Imprime o elemento
 
-        if ((i + 1) % 5 == 0) // Adiciona uma nova linha após 5 elementos
-        {
-            printf("\n");
-        }
-    }
-
-    
-}
 void draw_resistor_bands(int band1, int band2, int multiplier, PIO pio, uint sm)
 {
     // Mapeia as cores para valores RGB
@@ -334,7 +312,6 @@ void draw_resistor_bands(int band1, int band2, int multiplier, PIO pio, uint sm)
         }
     }
 
-    corrigir_linhas(desenho);
 
     pio_drawn(desenho, 0, pio, sm); // Cor da coluna 4
 }
@@ -401,7 +378,6 @@ void draw_resistor_bands_5(int band1, int band2, int band3, int multiplier, PIO 
             desenho[i * 5 + 4][2] = color_map[multiplier][2]; // B
         }
     }
-    corrigir_linhas(desenho);
 
     // Chama a função pio_drawn para desenhar as faixas
     pio_drawn(desenho, 0, pio, sm);
